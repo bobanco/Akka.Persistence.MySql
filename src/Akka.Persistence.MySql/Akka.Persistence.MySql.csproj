@@ -68,6 +68,7 @@
       <Link>Properties\SharedAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="Extension.cs" />
+    <Compile Include="Journal\BatchingMySqlJournal.cs" />
     <Compile Include="Journal\MySqlJournal.cs" />
     <Compile Include="Journal\MySqlJournalQueryExecutor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
