@@ -66,8 +66,8 @@ namespace Akka.Persistence.MySql.Journal
         /// </exception>
         public BatchingMySqlJournalSetup(Config config) : base(config, new QueryConfiguration(
             schemaName: config.GetString("schema-name"),
-            journalEventsTableName: config.GetString("table-name"),
-            metaTableName: config.GetString("metadata-table-name"),
+            journalEventsTableName: config.GetString("table-name", "event_journal"),
+            metaTableName: config.GetString("metadata-table-name","metadata"),
             persistenceIdColumnName: "persistence_id",
             sequenceNrColumnName: "sequence_nr",
             payloadColumnName: "payload",
@@ -77,8 +77,8 @@ namespace Akka.Persistence.MySql.Journal
             tagsColumnName: "tags",
             orderingColumnName: "ordering",
             serializerIdColumnName: "serializer_id",
-            timeout: config.GetTimeSpan("connection-timeout"),
-            defaultSerializer: config.GetString("default-serializer")))
+            timeout: config.GetTimeSpan("connection-timeout", TimeSpan.FromSeconds(30)),
+            defaultSerializer: config.GetString("serializer")))
         {
         }
     }
@@ -86,12 +86,26 @@ namespace Akka.Persistence.MySql.Journal
     public class BatchingMySqlJournal : BatchingSqlJournal<MySqlConnection, MySqlCommand>
     {
         
-        public BatchingMySqlJournal(Config config) : base(new BatchingMySqlJournalSetup(config))
+        public BatchingMySqlJournal(Config config) : this(new BatchingMySqlJournalSetup(config))
         {
-
+            var c = this.Setup.NamingConventions;
+             ByTagSql = $@"
+             SELECT TOP (@Take)
+             e.{c.PersistenceIdColumnName} as PersistenceId, 
+             e.{c.SequenceNrColumnName} as SequenceNr, 
+             e.{c.TimestampColumnName} as Timestamp, 
+             e.{c.IsDeletedColumnName} as IsDeleted, 
+             e.{c.ManifestColumnName} as Manifest, 
+             e.{c.PayloadColumnName} as Payload,
+             e.{c.SerializerIdColumnName} as SerializerId,
+             e.{c.OrderingColumnName} as Ordering
+             FROM {c.FullJournalTableName} e
+             WHERE e.{c.OrderingColumnName} > @Ordering AND e.{c.TagsColumnName} LIKE @Tag
+             ORDER BY {c.OrderingColumnName} ASC
+             ";
         }
 
-        public BatchingMySqlJournal(BatchingSqlJournalSetup setup) : base(setup)
+        public BatchingMySqlJournal(BatchingMySqlJournalSetup setup) : base(setup)
         {
             var conventions = Setup.NamingConventions;
             Initializers = ImmutableDictionary.CreateRange(new[]
@@ -119,6 +133,8 @@ namespace Akka.Persistence.MySql.Journal
                 );"),
             });
         }
+
+        protected override string ByTagSql { get; }
 
         protected override MySqlConnection CreateConnection(string connectionString) => new MySqlConnection(connectionString);
 
